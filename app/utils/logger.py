@@ -104,11 +104,11 @@ def get_logger(name: str = 'mirofish') -> logging.Logger:
     return logger
 
 
-# 创建默认日志器
+# Create default logger
 logger = setup_logger()
 
 
-# 便捷方法
+# Convenience methods
 def debug(msg, *args, **kwargs):
     logger.debug(msg, *args, **kwargs)
 

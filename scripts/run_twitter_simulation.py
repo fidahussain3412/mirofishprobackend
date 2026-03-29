@@ -1,16 +1,16 @@
 """
-OASIS Twitter模拟预设脚本
-此脚本读取配置文件中的参数来执行模拟，实现全程自动化
+OASIS Twitter simulation preset script
+This script reads parameters from configuration file to execute simulation, achieving full automation
 
-功能特性:
-- 完成模拟后不立即关闭环境，进入等待命令模式
-- 支持通过IPC接收Interview命令
-- 支持单个Agent采访和批量采访
-- 支持远程关闭环境命令
+Features:
+- After simulation completion, do not immediately close environment, enter command waiting mode
+- Support receiving Interview commands via IPC
+- Support single Agent interview and batch interview
+- Support remote environment closing command
 
-使用方式:
+Usage:
     python run_twitter_simulation.py --config /path/to/simulation_config.json
-    python run_twitter_simulation.py --config /path/to/simulation_config.json --no-wait  # 完成后立即关闭
+    python run_twitter_simulation.py --config /path/to/simulation_config.json --no-wait  # Close immediately after completion
 """
 
 import argparse
@@ -25,7 +25,7 @@ import sqlite3
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-# 全局变量：用于信号处理
+# Global variables: for signal handling
 _shutdown_event = None
 _cleanup_done = False
 
@@ -383,9 +383,9 @@ class IPCHandler:
 
 
 class TwitterSimulationRunner:
-    """Twitter模拟运行器"""
+    """Twitter simulation runner"""
     
-    # Twitter可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
+    # Available Twitter actions (does not include INTERVIEW, INTERVIEW can only be triggered manually via ManualAction)
     AVAILABLE_ACTIONS = [
         ActionType.CREATE_POST,
         ActionType.LIKE_POST,
@@ -397,11 +397,11 @@ class TwitterSimulationRunner:
     
     def __init__(self, config_path: str, wait_for_commands: bool = True):
         """
-        初始化模拟运行器
+        Initialize simulation runner
         
         Args:
-            config_path: 配置文件路径 (simulation_config.json)
-            wait_for_commands: 模拟完成后是否等待命令（默认True）
+            config_path: Configuration file path (simulation_config.json)
+            wait_for_commands: Whether to wait for commands after simulation completion (default True)
         """
         self.config_path = config_path
         self.config = self._load_config()
@@ -529,50 +529,50 @@ class TwitterSimulationRunner:
         return active_agents
     
     async def run(self, max_rounds: int = None):
-        """运行Twitter模拟
+        """Run Twitter simulation
         
         Args:
-            max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
+            max_rounds: Maximum simulation rounds (optional, for truncating overly long simulations)
         """
         print("=" * 60)
-        print("OASIS Twitter模拟")
-        print(f"配置文件: {self.config_path}")
-        print(f"模拟ID: {self.config.get('simulation_id', 'unknown')}")
-        print(f"等待命令模式: {'启用' if self.wait_for_commands else '禁用'}")
+        print("OASIS Twitter simulation")
+        print(f"Configuration file: {self.config_path}")
+        print(f"Simulation ID: {self.config.get('simulation_id', 'unknown')}")
+        print(f"Wait for commands mode: {'Enabled' if self.wait_for_commands else 'Disabled'}")
         print("=" * 60)
         
-        # 加载时间配置
+        # Load time configuration
         time_config = self.config.get("time_config", {})
         total_hours = time_config.get("total_simulation_hours", 72)
         minutes_per_round = time_config.get("minutes_per_round", 30)
         
-        # 计算总轮数
+        # Calculate total rounds
         total_rounds = (total_hours * 60) // minutes_per_round
         
-        # 如果指定了最大轮数，则截断
+        # If maximum rounds specified, truncate
         if max_rounds is not None and max_rounds > 0:
             original_rounds = total_rounds
             total_rounds = min(total_rounds, max_rounds)
             if total_rounds < original_rounds:
-                print(f"\n轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
+                print(f"\nRounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
         
-        print(f"\n模拟参数:")
-        print(f"  - 总模拟时长: {total_hours}小时")
-        print(f"  - 每轮时间: {minutes_per_round}分钟")
-        print(f"  - 总轮数: {total_rounds}")
+        print(f"\nSimulation parameters:")
+        print(f"  - Total simulation duration: {total_hours} hours")
+        print(f"  - Time per round: {minutes_per_round} minutes")
+        print(f"  - Total rounds: {total_rounds}")
         if max_rounds:
-            print(f"  - 最大轮数限制: {max_rounds}")
-        print(f"  - Agent数量: {len(self.config.get('agent_configs', []))}")
+            print(f"  - Maximum rounds limit: {max_rounds}")
+        print(f"  - Agent count: {len(self.config.get('agent_configs', []))}")
         
-        # 创建模型
-        print("\n初始化LLM模型...")
+        # Create model
+        print("\nInitializing LLM model...")
         model = self._create_model()
         
-        # 加载Agent图
-        print("加载Agent Profile...")
+        # Load Agent graph
+        print("Loading Agent Profile...")
         profile_path = self._get_profile_path()
         if not os.path.exists(profile_path):
-            print(f"错误: Profile文件不存在: {profile_path}")
+            print(f"Error: Profile file does not exist: {profile_path}")
             return
         
         self.agent_graph = await generate_twitter_agent_graph(
@@ -620,24 +620,23 @@ class TwitterSimulationRunner:
                         action_args={"content": content}
                     )
                 except Exception as e:
-                    print(f"  警告: 无法为Agent {agent_id}创建初始帖子: {e}")
+                    print(f"  Warning: Unable to create initial post for Agent {agent_id}: {e}")
             
             if initial_actions:
                 await self.env.step(initial_actions)
-                print(f"  已发布 {len(initial_actions)} 条初始帖子")
+                print(f"  Published {len(initial_actions)} initial posts")
         
-        # 主模拟循环
-        print("\n开始模拟循环...")
+        # Main simulation loop
+        print("\nStarting simulation loop...")
         start_time = datetime.now()
         
         for round_num in range(total_rounds):
-            # 计算当前模拟时间
+            # Calculate current simulation time
             simulated_minutes = round_num * minutes_per_round
             simulated_hour = (simulated_minutes // 60) % 24
             simulated_day = simulated_minutes // (60 * 24) + 1
             
-            # 获取本轮激活的Agent
-            active_agents = self._get_active_agents_for_round(
+            # Get active Agents for this round
                 self.env, simulated_hour, round_num
             )
             
@@ -663,20 +662,20 @@ class TwitterSimulationRunner:
                       f"- elapsed: {elapsed:.1f}s")
         
         total_elapsed = (datetime.now() - start_time).total_seconds()
-        print(f"\n模拟循环完成!")
-        print(f"  - 总耗时: {total_elapsed:.1f}秒")
-        print(f"  - 数据库: {db_path}")
+        print(f"\nSimulation loop completed!")
+        print(f"  - Total time elapsed: {total_elapsed:.1f} seconds")
+        print(f"  - Database: {db_path}")
         
-        # 是否进入等待命令模式
+        # Whether to enter wait for commands mode
         if self.wait_for_commands:
             print("\n" + "=" * 60)
-            print("进入等待命令模式 - 环境保持运行")
-            print("支持的命令: interview, batch_interview, close_env")
+            print("Entering wait for commands mode - environment remains running")
+            print("Supported commands: interview, batch_interview, close_env")
             print("=" * 60)
             
             self.ipc_handler.update_status("alive")
             
-            # 等待命令循环（使用全局 _shutdown_event）
+            # Wait for commands loop (using global _shutdown_event)
             try:
                 while not _shutdown_event.is_set():
                     should_continue = await self.ipc_handler.process_commands()
@@ -710,24 +709,24 @@ async def main():
         '--config', 
         type=str, 
         required=True,
-        help='配置文件路径 (simulation_config.json)'
+        help='Configuration file path (simulation_config.json)'
     )
     parser.add_argument(
         '--max-rounds',
         type=int,
         default=None,
-        help='最大模拟轮数（可选，用于截断过长的模拟）'
+        help='Maximum simulation rounds (optional, for truncating overly long simulations)'
     )
     parser.add_argument(
         '--no-wait',
         action='store_true',
         default=False,
-        help='模拟完成后立即关闭环境，不进入等待命令模式'
+        help='Immediately close environment after simulation completion, do not enter wait for commands mode'
     )
     
     args = parser.parse_args()
     
-    # 在 main 函数开始时创建 shutdown 事件
+    # Create shutdown event at the beginning of main function
     global _shutdown_event
     _shutdown_event = asyncio.Event()
     

@@ -1,62 +1,62 @@
 """
-OASIS 双平台并行模拟预设脚本
-同时运行Twitter和Reddit模拟，读取相同的配置文件
+OASIS dual-platform parallel simulation preset script
+Run Twitter and Reddit simulations simultaneously, reading the same configuration file
 
-功能特性:
-- 双平台（Twitter + Reddit）并行模拟
-- 完成模拟后不立即关闭环境，进入等待命令模式
-- 支持通过IPC接收Interview命令
-- 支持单个Agent采访和批量采访
-- 支持远程关闭环境命令
+Features:
+- Dual-platform (Twitter + Reddit) parallel simulation
+- Do not immediately close environment after simulation completion, enter command waiting mode
+- Support receiving Interview commands via IPC
+- Support single Agent interview and batch interview
+- Support remote environment closing command
 
-使用方式:
+Usage:
     python run_parallel_simulation.py --config simulation_config.json
-    python run_parallel_simulation.py --config simulation_config.json --no-wait  # 完成后立即关闭
+    python run_parallel_simulation.py --config simulation_config.json --no-wait  # Close immediately after completion
     python run_parallel_simulation.py --config simulation_config.json --twitter-only
     python run_parallel_simulation.py --config simulation_config.json --reddit-only
 
-日志结构:
+Log structure:
     sim_xxx/
     ├── twitter/
-    │   └── actions.jsonl    # Twitter 平台动作日志
+    │   └── actions.jsonl    # Twitter platform action logs
     ├── reddit/
-    │   └── actions.jsonl    # Reddit 平台动作日志
-    ├── simulation.log       # 主模拟进程日志
-    └── run_state.json       # 运行状态（API 查询用）
+    │   └── actions.jsonl    # Reddit platform action logs
+    ├── simulation.log       # Main simulation process log
+    └── run_state.json       # Run state (for API queries)
 """
 
 # ============================================================
-# 解决 Windows 编码问题：在所有 import 之前设置 UTF-8 编码
-# 这是为了修复 OASIS 第三方库读取文件时未指定编码的问题
+# Fix Windows encoding issues: Set UTF-8 encoding before all imports
+# This is to fix the issue where OASIS third-party libraries read files without specifying encoding
 # ============================================================
 import sys
 import os
 
 if sys.platform == 'win32':
-    # 设置 Python 默认 I/O 编码为 UTF-8
-    # 这会影响所有未指定编码的 open() 调用
+    # Set Python default I/O encoding to UTF-8
+    # This affects all open() calls that don't specify encoding
     os.environ.setdefault('PYTHONUTF8', '1')
     os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
     
-    # 重新配置标准输出流为 UTF-8（解决控制台中文乱码）
+    # Reconfigure standard output streams to UTF-8 (fix console Chinese garbled text)
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     
-    # 强制设置默认编码（影响 open() 函数的默认编码）
-    # 注意：这需要在 Python 启动时就设置，运行时设置可能不生效
-    # 所以我们还需要 monkey-patch 内置的 open 函数
+    # Force set default encoding (affects open() function's default encoding)
+    # Note: This needs to be set when Python starts, runtime setting may not take effect
+    # So we also need to monkey-patch the built-in open function
     import builtins
     _original_open = builtins.open
     
     def _utf8_open(file, mode='r', buffering=-1, encoding=None, errors=None, 
                    newline=None, closefd=True, opener=None):
         """
-        包装 open() 函数，对于文本模式默认使用 UTF-8 编码
-        这可以修复第三方库（如 OASIS）读取文件时未指定编码的问题
+        Wrap open() function, use UTF-8 encoding by default for text mode
+        This can fix the issue where third-party libraries (like OASIS) read files without specifying encoding
         """
-        # 只对文本模式（非二进制）且未指定编码的情况设置默认编码
+        # Only set default encoding for text mode (non-binary) when encoding is not specified
         if encoding is None and 'b' not in mode:
             encoding = 'utf-8'
         return _original_open(file, mode, buffering, encoding, errors, 
@@ -77,52 +77,52 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
 
-# 全局变量：用于信号处理
+# Global variables: for signal handling
 _shutdown_event = None
 _cleanup_done = False
 
-# 添加 backend 目录到路径
-# 脚本固定位于 backend/scripts/ 目录
+# Add backend directory to path
+# Script is fixed at backend/scripts/ directory
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
 _backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
 _project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
 sys.path.insert(0, _scripts_dir)
 sys.path.insert(0, _backend_dir)
 
-# 加载项目根目录的 .env 文件（包含 LLM_API_KEY 等配置）
+# Load .env file from project root directory (contains LLM_API_KEY and other configurations)
 from dotenv import load_dotenv
 _env_file = os.path.join(_project_root, '.env')
 if os.path.exists(_env_file):
     load_dotenv(_env_file)
-    print(f"已加载环境配置: {_env_file}")
+    print(f"Environment configuration loaded: {_env_file}")
 else:
-    # 尝试加载 backend/.env
+    # Try to load backend/.env
     _backend_env = os.path.join(_backend_dir, '.env')
     if os.path.exists(_backend_env):
         load_dotenv(_backend_env)
-        print(f"已加载环境配置: {_backend_env}")
+        print(f"Environment configuration loaded: {_backend_env}")
 
 
 class MaxTokensWarningFilter(logging.Filter):
-    """过滤掉 camel-ai 关于 max_tokens 的警告（我们故意不设置 max_tokens，让模型自行决定）"""
+    """Filter out camel-ai warnings about max_tokens (we intentionally don't set max_tokens, letting the model decide)"""
     
     def filter(self, record):
-        # 过滤掉包含 max_tokens 警告的日志
+        # Filter out logs containing max_tokens warnings
         if "max_tokens" in record.getMessage() and "Invalid or missing" in record.getMessage():
             return False
         return True
 
 
-# 在模块加载时立即添加过滤器，确保在 camel 代码执行前生效
+# Add filter immediately when module loads to ensure it takes effect before camel code executes
 logging.getLogger().addFilter(MaxTokensWarningFilter())
 
 
 def disable_oasis_logging():
     """
-    禁用 OASIS 库的详细日志输出
-    OASIS 的日志太冗余（记录每个 agent 的观察和动作），我们使用自己的 action_logger
+    Disable detailed logging output from OASIS library
+    OASIS logs are too verbose (recording every agent's observations and actions), we use our own action_logger
     """
-    # 禁用 OASIS 的所有日志器
+    # Disable all OASIS loggers
     oasis_loggers = [
         "social.agent",
         "social.twitter", 
@@ -133,19 +133,19 @@ def disable_oasis_logging():
     
     for logger_name in oasis_loggers:
         logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.CRITICAL)  # 只记录严重错误
+        logger.setLevel(logging.CRITICAL)  # Only log critical errors
         logger.handlers.clear()
         logger.propagate = False
 
 
 def init_logging_for_simulation(simulation_dir: str):
     """
-    初始化模拟的日志配置
+    Initialize logging configuration for simulation
     
     Args:
-        simulation_dir: 模拟目录路径
+        simulation_dir: Simulation directory path
     """
-    # 禁用 OASIS 的详细日志
+    # Disable OASIS detailed logging
     disable_oasis_logging()
     
     # 清理旧的 log 目录（如果存在）

@@ -1,11 +1,11 @@
 """
-Zep检索工具服务
-封装图谱搜索、节点读取、边查询等工具，供Report Agent使用
+Zep retrieval tools service
+Encapsulates graph search, node reading, edge query tools, etc., for Report Agent use
 
-核心检索工具（优化后）：
-1. InsightForge（深度洞察检索）- 最强大的混合检索，自动生成子问题并多维度检索
-2. PanoramaSearch（广度搜索）- 获取全貌，包括过期内容
-3. QuickSearch（简单搜索）- 快速检索
+Core retrieval tools (optimized):
+1. InsightForge (Deep Insight Retrieval) - Most powerful hybrid retrieval, automatically generates sub-questions and multi-dimensional retrieval
+2. PanoramaSearch (Breadth Search) - Get full picture, including expired content
+3. QuickSearch (Simple Search) - Fast retrieval
 """
 
 import time
